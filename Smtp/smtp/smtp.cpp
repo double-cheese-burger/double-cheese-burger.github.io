@@ -37,6 +37,16 @@ Csmtp::~Csmtp()
 }
 
 bool Csmtp::CreateConn(){
+
+    WORD wVersionRequested;
+    WSADATA wsaData;
+    int ret;
+
+    //WinSock初始化
+    wVersionRequested = MAKEWORD(2, 2); //希望使用的WinSock DLL的版本
+    ret = WSAStartup(wVersionRequested, &wsaData);
+
+
     SOCKET skClientTemp = socket(AF_INET,SOCK_STREAM,0);
     sockaddr_in saddr;
     hostent* pHostent;
@@ -129,13 +139,23 @@ int Csmtp::Login()
     sendBuff += "\r\n";
     delete[] ecode;
 
-    if(false == Send(sendBuff) || false == Recv())
+    if (false == Send(sendBuff) || false == Recv())
         return 1;
-    if(strstr(buff,"550") != NULL)
-        return 2;
-    if(NULL != strstr(buff,"535"))
-        return 3;
 
+    sendBuff.empty();
+    ecode = base64Encode(pass.c_str(), (unsigned int)strlen(pass.c_str()));
+    sendBuff = ecode;
+    sendBuff += "\r\n";
+    delete[]ecode;
+
+    if (false == Send(sendBuff) || false == Recv())
+        return 1;
+
+    if (NULL != strstr(buff, "550"))
+        return 2;
+
+    if (NULL != strstr(buff, "535"))
+        return 3;
     return 0;
 }
 
@@ -143,19 +163,22 @@ bool Csmtp::SendEmailHead()
 {
     //文件头格式
 
-    string sendBuff;
+    string sendBuff = "";
     sendBuff = "MAIL FROM: <"+user +">\r\n";
     if(false == Send(sendBuff) || false == Recv())
         return false;
 
-    sendBuff = "PCRT TO: <" + targetAddr + ">\r\n";
+    sendBuff = "";
+    sendBuff = "RCPT TO: <" + targetAddr + ">\r\n";
     if(false == Send(sendBuff) || false == Recv())
         return false;
 
+    sendBuff = "";
     sendBuff = "DATA\r\n";
-    if(false == Send(sendBuff) || Recv())
+    if(false == Send(sendBuff) || false == Recv())
         return false;
 
+    //sendBuff = "";
     FormatEmailHead(sendBuff);
     if(false == Send(sendBuff))
         return false;
@@ -165,11 +188,10 @@ bool Csmtp::SendEmailHead()
 
 bool Csmtp::SendTextBody()
 {
-    //发送文件主题内容
     string sendBuff;
-    sendBuff += "--qwertyuiop--\r\n";
-    sendBuff += "Content-Type: Text/plain;";
-    sendBuff += "charset = \"utf-8\"\r\n\r\n";
+    sendBuff = "--qwertyuiop\r\n";
+    sendBuff += "Content-Type: text/plain;";
+    sendBuff += "charset=\"utf-8\"\r\n\r\n";
     sendBuff += content;
     sendBuff += "\r\n\r\n";
     return Send(sendBuff);
@@ -306,9 +328,11 @@ void Csmtp::DeleteAllAttachment() /*删除所有的文件*/
         sendBuff += "\r\n";
         sendBuff += "Content-Transfer-Encoding: base64\r\n";
         sendBuff += "Content-Disposition: attachment;\r\n";
+
         sendBuff += " filename=\"";
         sendBuff += (*pIter)->filename;
         sendBuff += "\"";
+
         sendBuff += "\r\n";
         sendBuff += "\r\n";
         Send(sendBuff);
